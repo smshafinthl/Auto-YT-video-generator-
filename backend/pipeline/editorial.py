@@ -20,8 +20,7 @@ from backend.models.config import settings
 from backend.providers.llm import get_llm
 
 STYLE_CONSTRAINTS = (
-    "flat 2D vector art, unshaded, solid #FFFFFF white background, "
-    "black lines, zero shadows, minimal character motion, zero camera movement"
+    "hyperrealistic dark horror, cinematic lighting, eerie detailed 8k photography, nightmare style, - no stickman, no sketch, no cartoon"
 )
 
 # Module-level persona cache — populated on first call to _load_persona()
