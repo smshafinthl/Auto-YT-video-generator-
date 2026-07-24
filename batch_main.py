@@ -140,24 +140,55 @@ def main() -> int:
         help="LLM provider: 'local' (HuggingFace), 'gemini', 'openai', or 'auto'.",
     )
     parser.add_argument(
+        "--image-backend",
+        choices=["local", "comfyui"],
+        default=None,
+        help="Image generation backend: 'local' (HuggingFace diffusers) or 'comfyui'.",
+    )
+    parser.add_argument(
+        "--image-model",
+        metavar="IMAGE_MODEL",
+        default=None,
+        help=(
+            "Local diffusers model for image generation "
+            "(e.g., stabilityai/sd-turbo, runwayml/stable-diffusion-v1-5). "
+            "Only used when --image-backend=local."
+        ),
+    )
+    parser.add_argument(
         "--unload-model",
         action="store_true",
         help=(
-            "Fully unload the Wan I2V model from GPU VRAM between each run. "
+            "Fully unload all models (Wan I2V + image) from GPU VRAM between each run. "
             "Safer for large batches on small GPUs but adds reload time per video."
         ),
     )
 
     args = parser.parse_args()
 
-    # Override LLM settings if CLI flags provided
-    from backend.models.config import settings
+    # Override LLM + image settings if CLI flags provided
+    from backend.models.config import settings as app_settings
+    import os
+
     if args.provider:
-        settings.llm_provider = args.provider
+        app_settings.llm_provider = args.provider
     if args.model:
-        settings.local_llm_model = args.model
-        settings.gemini_model = args.model
-        settings.bifrost_model = args.model
+        app_settings.local_llm_model = args.model
+        app_settings.gemini_model = args.model
+        app_settings.bifrost_model = args.model
+    if args.image_backend:
+        app_settings.image_backend = args.image_backend
+    if args.image_model:
+        app_settings.local_image_model = args.image_model
+
+    # Resolve output_dir to an ABSOLUTE path under cwd to prevent
+    # Kaggle path nesting (Auto-YT.../Auto-YT.../...)
+    from pathlib import Path
+    raw_out = args.output_dir
+    out_dir_path = Path(raw_out)
+    if not out_dir_path.is_absolute():
+        out_dir_path = Path.cwd() / out_dir_path
+    resolved_out_dir = str(out_dir_path.resolve())
 
     # ── Resolve prompts ──────────────────────────────────────────────────────
     if args.prompts_file:
@@ -169,12 +200,12 @@ def main() -> int:
         print("[ERROR] No valid prompts found — nothing to generate.", file=sys.stderr)
         return 1
 
-    logger.info("Loaded %d prompts. Output → %s", len(prompts), args.output_dir)
+    logger.info("Loaded %d prompts. Output → %s", len(prompts), resolved_out_dir)
 
     # ── Run batch ────────────────────────────────────────────────────────────
     results = run_batch(
         prompts=prompts,
-        output_dir=args.output_dir,
+        output_dir=resolved_out_dir,
         stop_on_error=args.stop_on_error,
         unload_model_between_runs=args.unload_model,
     )

@@ -22,7 +22,9 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = Field(default="placeholder")
     elevenlabs_voice_id: str = Field(default="21m00Tcm4TlvDq8ikWAM")
 
-    # Video backend
+    # Image & Video generation
+    image_backend: str = Field(default="local")  # "local" (diffusers), "comfyui"
+    local_image_model: str = Field(default="stabilityai/sd-turbo")
     video_backend: str = Field(default="local")
     cloud_video_api_key: str = Field(default="")
     cloud_video_base_url: str = Field(default="")
@@ -31,8 +33,8 @@ class Settings(BaseSettings):
     wan_model_path: str = Field(default="./models/wan2.2-i2v-5b")
 
     # Directories
-    outputs_dir: Path = Field(default=Path("./outputs"))
-    models_dir: Path = Field(default=Path("./models"))
+    outputs_dir: Path = Field(default=Path("./outputs").resolve())
+    models_dir: Path = Field(default=Path("./models").resolve())
 
     # FastAPI server
     api_host: str = Field(default="0.0.0.0")

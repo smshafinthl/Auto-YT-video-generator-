@@ -46,6 +46,13 @@ def _free_vram(unload_model: bool = False) -> None:
     except Exception:
         pass
 
+    # Step 1b: Unload local image diffusers model
+    try:
+        from backend.providers.image_backend import unload_local_image_model
+        unload_local_image_model()
+    except Exception:
+        pass
+
     # Step 2: Python garbage collection
     gc.collect()
 
@@ -70,7 +77,6 @@ def _free_vram(unload_model: bool = False) -> None:
                 del LocalWanBackend._pipeline
                 LocalWanBackend._pipeline = None
                 gc.collect()
-                # Second CUDA flush after model deletion
                 try:
                     import torch
                     if torch.cuda.is_available():
@@ -81,6 +87,23 @@ def _free_vram(unload_model: bool = False) -> None:
         except Exception as exc:
             logger.warning("_free_vram: could not unload Wan pipeline: %s", exc)
 
+        # Also destroy the local image diffusers pipeline
+        try:
+            from backend.providers.image_backend import LocalDiffusersImageBackend
+            if LocalDiffusersImageBackend._pipeline is not None:
+                del LocalDiffusersImageBackend._pipeline
+                LocalDiffusersImageBackend._pipeline = None
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except ImportError:
+                    pass
+                logger.info("_free_vram: Local image diffusers pipeline unloaded from memory")
+        except Exception as exc:
+            logger.warning("_free_vram: could not unload image pipeline: %s", exc)
+
 
 # ---------------------------------------------------------------------------
 # Main batch runner
@@ -88,7 +111,7 @@ def _free_vram(unload_model: bool = False) -> None:
 
 def run_batch(
     prompts: list[str],
-    output_dir: str = "outputs/batch",
+    output_dir: str | None = None,
     stop_on_error: bool = False,
     unload_model_between_runs: bool = False,
 ) -> list[dict]:
@@ -123,7 +146,15 @@ def run_batch(
     from backend.pipeline.graph import compiled_graph
     from backend.pipeline.state import initial_state
 
-    out_path = Path(output_dir)
+    # Resolve output_dir to an absolute path under the script's CWD
+    # to prevent path nesting when Kaggle changes working directories
+    import os
+    if output_dir is None:
+        _base = Path(os.environ.get("OUTPUT_DIR", str(Path.cwd() / "outputs" / "batch")))
+    else:
+        _base = Path(output_dir)
+    out_path = _base if _base.is_absolute() else Path.cwd() / _base
+    out_path = out_path.resolve()
     out_path.mkdir(parents=True, exist_ok=True)
 
     total = len(prompts)

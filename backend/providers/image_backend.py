@@ -65,8 +65,89 @@ class ImageBackend(abc.ABC):
         ...
 
 
+class LocalDiffusersImageBackend(ImageBackend):
+    """Local image generator using HuggingFace diffusers on GPU."""
+
+    _pipeline = None
+
+    def __init__(self, model_name: str | None = None) -> None:
+        self.model_name = model_name or settings.local_image_model or "stabilityai/sd-turbo"
+
+    @classmethod
+    def _get_pipeline(cls, model_name: str):
+        if cls._pipeline is None:
+            import torch
+            from diffusers import AutoPipelineForText2Image, StableDiffusionPipeline
+
+            logger.info("Loading local diffusers image pipeline: %s", model_name)
+            dtype = (
+                torch.bfloat16
+                if (torch.cuda.is_available() and hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported())
+                else torch.float16
+            )
+
+            try:
+                # sd-turbo or sdxl-turbo works best with AutoPipelineForText2Image
+                cls._pipeline = AutoPipelineForText2Image.from_pretrained(
+                    model_name,
+                    torch_dtype=dtype,
+                    variant="fp16" if dtype == torch.float16 else None,
+                )
+            except Exception:
+                # Fallback to general StableDiffusionPipeline
+                cls._pipeline = StableDiffusionPipeline.from_pretrained(
+                    model_name,
+                    torch_dtype=dtype,
+                )
+
+            if torch.cuda.is_available():
+                cls._pipeline = cls._pipeline.to("cuda")
+                logger.info("Local image pipeline loaded on CUDA GPU")
+            
+        return cls._pipeline
+
+    def generate_image(self, prompt: str, seed_image_path: str, output_path: str) -> str:
+        import torch
+
+        full_prompt = f"{prompt}, {STYLE_CONSTRAINTS}"
+        pipe = self._get_pipeline(self.model_name)
+
+        logger.info("Generating local image using prompt: %s", full_prompt)
+        
+        num_inference_steps = 1 if "turbo" in self.model_name.lower() else 30
+        guidance_scale = 0.0 if "turbo" in self.model_name.lower() else 7.5
+
+        with torch.no_grad():
+            image = pipe(
+                prompt=full_prompt,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            ).images[0]
+
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        image.save(output_path)
+        return str(Path(output_path).resolve())
+
+
+def unload_local_image_model() -> None:
+    """Unload the local image diffusers model from VRAM."""
+    if LocalDiffusersImageBackend._pipeline is not None:
+        del LocalDiffusersImageBackend._pipeline
+        LocalDiffusersImageBackend._pipeline = None
+        import gc
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except ImportError:
+            pass
+        logger.info("Local image diffusers model unloaded from VRAM")
+
+
 class ComfyUIImageBackend(ImageBackend):
-    """Image backend that drives a running ComfyUI server, with automatic local fallback."""
+    """Image backend that drives a running ComfyUI server. Fails directly without fallbacks."""
 
     POLL_INTERVAL = 2  # seconds
     TIMEOUT = 120  # seconds
@@ -84,64 +165,53 @@ class ComfyUIImageBackend(ImageBackend):
         payload = {"prompt": workflow}
         base_url = settings.comfyui_base_url.rstrip("/")
 
-        try:
-            resp = requests.post(f"{base_url}/prompt", json=payload, timeout=5)
-            if resp.status_code != 200:
-                raise RuntimeError(f"ComfyUI /prompt returned {resp.status_code}: {resp.text}")
+        resp = requests.post(f"{base_url}/prompt", json=payload, timeout=30)
+        if resp.status_code != 200:
+            raise RuntimeError(f"ComfyUI /prompt returned {resp.status_code}: {resp.text}")
 
-            prompt_id = resp.json()["prompt_id"]
+        prompt_id = resp.json()["prompt_id"]
 
-            # Poll until complete
-            elapsed = 0
-            while elapsed < self.TIMEOUT:
-                time.sleep(self.POLL_INTERVAL)
-                elapsed += self.POLL_INTERVAL
+        # Poll until complete
+        elapsed = 0
+        while elapsed < self.TIMEOUT:
+            time.sleep(self.POLL_INTERVAL)
+            elapsed += self.POLL_INTERVAL
 
-                hist_resp = requests.get(f"{base_url}/history/{prompt_id}", timeout=10)
-                if hist_resp.status_code != 200:
-                    continue
+            hist_resp = requests.get(f"{base_url}/history/{prompt_id}", timeout=10)
+            if hist_resp.status_code != 200:
+                continue
 
-                history = hist_resp.json()
-                if prompt_id not in history:
-                    continue
+            history = hist_resp.json()
+            if prompt_id not in history:
+                continue
 
-                job_data = history[prompt_id]
-                outputs = job_data.get("outputs", {})
+            job_data = history[prompt_id]
+            outputs = job_data.get("outputs", {})
 
-                # Find the first image output
-                for node_output in outputs.values():
-                    images = node_output.get("images", [])
-                    if images:
-                        filename = images[0]["filename"]
-                        view_resp = requests.get(
-                            f"{base_url}/view",
-                            params={"filename": filename},
-                            timeout=30,
+            # Find the first image output
+            for node_output in outputs.values():
+                images = node_output.get("images", [])
+                if images:
+                    filename = images[0]["filename"]
+                    view_resp = requests.get(
+                        f"{base_url}/view",
+                        params={"filename": filename},
+                        timeout=30,
+                    )
+                    if view_resp.status_code != 200:
+                        raise RuntimeError(
+                            f"ComfyUI /view returned {view_resp.status_code}"
                         )
-                        if view_resp.status_code != 200:
-                            raise RuntimeError(
-                                f"ComfyUI /view returned {view_resp.status_code}"
-                            )
-                        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-                        with open(output_path, "wb") as f:
-                            f.write(view_resp.content)
-                        return str(Path(output_path).resolve())
+                    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                    with open(output_path, "wb") as f:
+                        f.write(view_resp.content)
+                    return str(Path(output_path).resolve())
 
-            raise RuntimeError(f"ComfyUI timed out after {self.TIMEOUT}s for prompt_id={prompt_id}")
-
-        except Exception as exc:
-            logger.warning(
-                "ComfyUI image generation failed (Error: %s). "
-                "Falling back to copying the stickman seed image as the scene background.",
-                exc
-            )
-            # Copy seed image as fallback scene image
-            import shutil
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(seed_image_path, output_path)
-            return str(Path(output_path).resolve())
+        raise RuntimeError(f"ComfyUI timed out after {self.TIMEOUT}s for prompt_id={prompt_id}")
 
 
 def get_image_backend() -> ImageBackend:
     """Factory — returns the configured image backend."""
+    if settings.image_backend.lower().strip() in ("local", "diffusers"):
+        return LocalDiffusersImageBackend()
     return ComfyUIImageBackend()
