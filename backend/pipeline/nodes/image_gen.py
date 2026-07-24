@@ -9,6 +9,35 @@ from backend.providers.image_backend import get_image_backend
 logger = logging.getLogger(__name__)
 
 
+def ensure_seed_image(seed_path: Path) -> None:
+    """Ensure seed.png exists by drawing a default stickman image if missing."""
+    if seed_path.exists():
+        return
+    logger.info("seed.png not found. Generating default stickman seed image...")
+    try:
+        from PIL import Image, ImageDraw
+        seed_path.parent.mkdir(parents=True, exist_ok=True)
+        img = Image.new("RGB", (512, 512), "white")
+        draw = ImageDraw.Draw(img)
+        # Head (circle)
+        draw.ellipse([216, 120, 296, 200], outline="black", width=4)
+        # Eyes
+        draw.ellipse([236, 145, 244, 153], fill="black")
+        draw.ellipse([268, 145, 276, 153], fill="black")
+        # Body
+        draw.line([256, 200, 256, 360], fill="black", width=4)
+        # Arms
+        draw.line([256, 240, 180, 290], fill="black", width=4)
+        draw.line([256, 240, 332, 290], fill="black", width=4)
+        # Legs
+        draw.line([256, 360, 196, 450], fill="black", width=4)
+        draw.line([256, 360, 316, 450], fill="black", width=4)
+        img.save(seed_path)
+        logger.info("Default seed.png generated at %s", seed_path)
+    except Exception as exc:
+        logger.error("Failed to generate default seed.png: %s", exc)
+
+
 def image_gen_node(state: PipelineState) -> dict:
     """LangGraph node: generate one image per video prompt via ComfyUI."""
     if state.get("error"):
@@ -24,6 +53,7 @@ def image_gen_node(state: PipelineState) -> dict:
     persona_dir = Path(personas_dir) / persona
 
     seed_image_path = persona_dir / "seed.png"
+    ensure_seed_image(seed_image_path)
     if not seed_image_path.exists():
         return {
             "error": (
@@ -88,6 +118,7 @@ def _image_gen_project(state: PipelineState) -> dict:
     persona_dir = Path(personas_dir) / active_persona
 
     seed_image_path = persona_dir / "seed.png"
+    ensure_seed_image(seed_image_path)
     if not seed_image_path.exists():
         return {
             "error": (
