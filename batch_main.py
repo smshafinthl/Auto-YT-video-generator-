@@ -52,6 +52,7 @@ def ensure_dependencies():
         "diffusers": "diffusers",
         "transformers": "transformers",
         "huggingface_hub": "huggingface_hub",
+        "json_repair": "json_repair",
     }
     missing = []
     for mod, pkg in packages.items():

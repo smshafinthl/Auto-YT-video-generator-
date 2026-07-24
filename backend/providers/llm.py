@@ -76,7 +76,7 @@ class LocalHuggingFaceLLM:
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=1024,
+                max_new_tokens=2048,
                 temperature=max(self.temperature, 0.1),
                 do_sample=self.temperature > 0,
                 pad_token_id=tokenizer.eos_token_id,
