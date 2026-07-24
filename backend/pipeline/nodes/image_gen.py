@@ -76,11 +76,15 @@ def image_gen_node(state: PipelineState) -> dict:
     image_paths: list[str] = []
     progress_entries: list[str] = []
 
+    HORROR_TAGS = ", creepy vintage style, dark ambient lighting, analog horror aesthetic, eerie atmosphere, haunting cinematic lighting"
+
     for n, prompt in enumerate(state.get("video_prompts", [])):
         if char_description:
             full_prompt = f"{char_description}. {prompt}"
         else:
             full_prompt = prompt
+
+        full_prompt = f"{full_prompt}{HORROR_TAGS}"
 
         output_path = str(output_base / f"scene_{n:02d}.png")
 
@@ -152,6 +156,8 @@ def _image_gen_project(state: PipelineState) -> dict:
             full_prompt = f"{char_description}. {prompt}"
         else:
             full_prompt = prompt
+
+        full_prompt = f"{full_prompt}, creepy vintage style, dark ambient lighting, analog horror aesthetic, eerie atmosphere, haunting cinematic lighting"
 
         output_path = str(output_base / f"scene_{scene['order']:02d}.png")
 

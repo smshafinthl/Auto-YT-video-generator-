@@ -42,14 +42,54 @@ import argparse
 import json
 import logging
 import sys
+import subprocess
 from pathlib import Path
+
+# ── Auto Dependency Check ──────────────────────────────────────────────────
+def ensure_dependencies():
+    packages = {
+        "gTTS": "gTTS",
+        "diffusers": "diffusers",
+        "transformers": "transformers",
+        "huggingface_hub": "huggingface_hub",
+    }
+    missing = []
+    for mod, pkg in packages.items():
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(pkg)
+    
+    if missing:
+        print(f"[AUTO-INSTALL] Missing required packages: {missing}. Installing via pip...", flush=True)
+        cmd = [sys.executable, "-m", "pip", "install"] + missing
+        subprocess.run(cmd, check=True)
+        print("[AUTO-INSTALL] Dependencies installed successfully.", flush=True)
+
+ensure_dependencies()
+
+# ── Wan 2.2 Model Auto-Downloader ──────────────────────────────────────────
+def ensure_wan_model():
+    model_dir = Path("./models/wan2.2").resolve()
+    if not model_dir.exists() or not any(model_dir.iterdir()):
+        print(f"[AUTO-DOWNLOAD] Wan 2.2 model not found at {model_dir}. Downloading Wan-AI/Wan2.1-I2V-14B-480P from HuggingFace...", flush=True)
+        model_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            from huggingface_hub import snapshot_download
+            snapshot_download(
+                repo_id="Wan-AI/Wan2.1-I2V-14B-480P",
+                local_dir=str(model_dir),
+                local_dir_use_symlinks=False
+            )
+            print(f"[AUTO-DOWNLOAD] Wan 2.2 model downloaded successfully to {model_dir}.", flush=True)
+        except Exception as e:
+            print(f"[AUTO-DOWNLOAD WARNING] Failed to download Wan model: {e}. Pipeline will fallback to image compilation if needed.", flush=True)
 
 # Load .env before any settings/pipeline imports
 from dotenv import load_dotenv
 load_dotenv()
 
 from backend.pipeline.batch_runner import run_batch  # noqa: E402
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -163,6 +203,11 @@ def main() -> int:
             "Safer for large batches on small GPUs but adds reload time per video."
         ),
     )
+    parser.add_argument(
+        "--download-wan",
+        action="store_true",
+        help="Force download Wan 2.2 model before running the pipeline.",
+    )
 
     args = parser.parse_args()
 
@@ -180,6 +225,17 @@ def main() -> int:
         app_settings.image_backend = args.image_backend
     if args.image_model:
         app_settings.local_image_model = args.image_model
+
+    # Ensure Wan model is available if requested or missing
+    if args.download_wan:
+        ensure_wan_model()
+    else:
+        # Also auto-check if model directory doesn't exist
+        wan_path = Path(app_settings.wan_model_path)
+        if not wan_path.is_absolute():
+            wan_path = Path.cwd() / wan_path
+        if not wan_path.exists() or not any(wan_path.resolve().iterdir()):
+            ensure_wan_model()
 
     # Resolve output_dir to an ABSOLUTE path under cwd to prevent
     # Kaggle path nesting (Auto-YT.../Auto-YT.../...)
