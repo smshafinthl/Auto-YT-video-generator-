@@ -6,7 +6,13 @@ from pydantic import Field
 class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
-    # Bifrost LLM Gateway
+    # LLM Settings
+    llm_provider: str = Field(default="auto")  # "auto", "gemini", "openai"
+    gemini_api_key: str = Field(default="")
+    google_api_key: str = Field(default="")
+    gemini_model: str = Field(default="gemini-2.0-flash")
+
+    # Bifrost LLM Gateway (OpenAI-compatible)
     bifrost_base_url: str = Field(default="https://opencode.ai/zen/go/v1")
     bifrost_api_key: str = Field(default="placeholder")
     bifrost_model: str = Field(default="gpt-4o-mini")
