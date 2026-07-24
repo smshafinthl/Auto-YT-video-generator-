@@ -22,6 +22,7 @@ class PipelineState(TypedDict):
     scenes: list[dict]
     music_track: Optional[str]
     persona: Optional[dict]
+    story_context: Optional[str]
 
 
 def initial_state(
@@ -31,6 +32,7 @@ def initial_state(
     project_id: Optional[str] = None,
     scenes: Optional[list] = None,
     music_track: Optional[str] = None,
+    story_context: Optional[str] = None,
 ) -> PipelineState:
     """Return a fully initialized PipelineState with empty collections and None for optional fields."""
     return PipelineState(
@@ -51,4 +53,5 @@ def initial_state(
         scenes=scenes if scenes is not None else [],
         music_track=music_track,
         persona=None,
+        story_context=story_context,
     )

@@ -166,6 +166,7 @@ def run_batch(
     print(f"{'='*65}\n")
 
     batch_start = time.perf_counter()
+    running_story_context: str | None = None
 
     for i, prompt in enumerate(prompts):
         job_id = secrets.token_hex(6)
@@ -174,6 +175,8 @@ def run_batch(
         print(f"{'─'*65}")
         print(f"  [{i+1:02d}/{total:02d}]  job_id={job_id}")
         print(f"  Prompt : {prompt}")
+        if running_story_context:
+            print(f"  Context: {running_story_context[:100]}...")
         print(f"{'─'*65}")
 
         result: dict = {
@@ -186,8 +189,12 @@ def run_batch(
         }
 
         try:
-            state = initial_state(job_id=job_id, user_prompt=prompt)
+            state = initial_state(job_id=job_id, user_prompt=prompt, story_context=running_story_context)
             final_state = compiled_graph.invoke(state)
+
+            # Update running story context for next episode in batch
+            if final_state.get("story_context"):
+                running_story_context = final_state["story_context"]
 
             # Print per-step progress log
             for entry in final_state.get("progress_log", []):

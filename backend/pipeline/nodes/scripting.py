@@ -77,9 +77,16 @@ def scripting_node(state: PipelineState) -> dict:
         return {}
 
     llm = get_llm()
+    
+    story_ctx = state.get("story_context")
+    if story_ctx:
+        user_content = f"PREVIOUS EPISODE SUMMARY: {story_ctx}\n\nCURRENT EPISODE TOPIC: {state['user_prompt']}\n\nContinue the horror story seamlessly from this point for the next episode."
+    else:
+        user_content = state["user_prompt"]
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": state["user_prompt"]},
+        {"role": "user", "content": user_content},
     ]
 
     try:
@@ -97,12 +104,17 @@ def scripting_node(state: PipelineState) -> dict:
         if not voiceover_script or not isinstance(voiceover_script, str):
             voiceover_script = str(state["user_prompt"])
 
+        # Update story context with latest script progression
+        new_summary = f"{state['user_prompt']}: {voiceover_script[:250]}"
+        updated_context = f"{story_ctx} → {new_summary}" if story_ctx else new_summary
+
         msg = "scripting_node: script generated successfully"
         if state.get("progress_queue") is not None:
             state["progress_queue"].put(msg)
         return {
             "video_prompts": video_prompts,
             "voiceover_script": voiceover_script,
+            "story_context": updated_context,
             "progress_log": [msg],
         }
 
