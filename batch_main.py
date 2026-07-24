@@ -68,22 +68,32 @@ def ensure_dependencies():
 
 ensure_dependencies()
 
-# ── Wan 2.2 Model Auto-Downloader ──────────────────────────────────────────
+# ── Wan Model Auto-Downloader ──────────────────────────────────────────────
 def ensure_wan_model():
     model_dir = Path("./models/wan2.2").resolve()
     if not model_dir.exists() or not any(model_dir.iterdir()):
-        print(f"[AUTO-DOWNLOAD] Wan 2.2 model not found at {model_dir}. Downloading Wan-AI/Wan2.1-I2V-14B-480P from HuggingFace...", flush=True)
+        repo_id = "Wan-AI/Wan2.1-T2V-1.3B"
+        print(f"[AUTO-DOWNLOAD] Wan model not found at {model_dir}. Downloading lightweight model '{repo_id}' from HuggingFace...", flush=True)
         model_dir.mkdir(parents=True, exist_ok=True)
         try:
             from huggingface_hub import snapshot_download
             snapshot_download(
-                repo_id="Wan-AI/Wan2.1-I2V-14B-480P",
+                repo_id=repo_id,
                 local_dir=str(model_dir),
-                local_dir_use_symlinks=False
+                local_dir_use_symlinks=False,
+                ignore_patterns=["*.pt", "*.bin"]  # Prefer safetensors / lightweight weights
             )
-            print(f"[AUTO-DOWNLOAD] Wan 2.2 model downloaded successfully to {model_dir}.", flush=True)
+            print(f"[AUTO-DOWNLOAD] Wan model downloaded successfully to {model_dir}.", flush=True)
         except Exception as e:
-            print(f"[AUTO-DOWNLOAD WARNING] Failed to download Wan model: {e}. Pipeline will fallback to image compilation if needed.", flush=True)
+            print(f"[AUTO-DOWNLOAD WARNING] Could not download Wan model '{repo_id}': {e}.", flush=True)
+            print("[AUTO-DOWNLOAD WARNING] Cleaning up incomplete downloads...", flush=True)
+            try:
+                import shutil
+                if model_dir.exists():
+                    shutil.rmtree(model_dir, ignore_errors=True)
+            except Exception:
+                pass
+            print("[AUTO-DOWNLOAD WARNING] Pipeline will safely fall back to FFmpeg image compilation.", flush=True)
 
 # Load .env before any settings/pipeline imports
 from dotenv import load_dotenv
