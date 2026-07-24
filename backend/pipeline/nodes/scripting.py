@@ -1,12 +1,15 @@
 import json
 import re
+import logging
 
 from backend.pipeline.state import PipelineState
 from backend.providers.llm import get_llm
 
+logger = logging.getLogger(__name__)
+
 SYSTEM_PROMPT = (
     "You are a creative director for short-form faceless YouTube Shorts video content. "
-    "Given a user topic, produce a JSON object with exactly two keys:\n"
+    "Given a user topic, produce a valid single-line JSON object with exactly two keys:\n"
     '  "video_prompts": a list of 4 to 6 short cinematic scene descriptions (strings)\n'
     '  "voiceover_script": a single string containing 3 to 5 sentences of narration\n'
     "\n"
@@ -22,18 +25,34 @@ SYSTEM_PROMPT = (
     '    Tech     → "Follow for more tech explained simply!"\n'
     "  NEVER skip this CTA. It is mandatory on every single video.\n"
     "\n"
-    "Output ONLY valid JSON — no markdown fences, no extra text, no explanations."
+    "Output ONLY valid JSON — no markdown fences, no linebreaks inside text values, no extra text."
 )
 
 
-def _strip_markdown_fences(text: str) -> str:
-    """Remove ```json ... ``` or ``` ... ``` wrappers if present."""
+def _parse_json_lenient(text: str) -> dict:
+    """Parse JSON string leniently, fixing unescaped newlines or raw markdown fences."""
     text = text.strip()
-    # Remove opening fence (```json or ```)
     text = re.sub(r"^```(?:json)?\s*\n?", "", text)
-    # Remove closing fence
     text = re.sub(r"\n?```\s*$", "", text)
-    return text.strip()
+    text = text.strip()
+
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        pass
+
+    # Extract JSON object substring if model added leading/trailing prose
+    match = re.search(r"(\{[\s\S]*\})", text)
+    if match:
+        extracted = match.group(1)
+        try:
+            return json.loads(extracted, strict=False)
+        except json.JSONDecodeError:
+            pass
+
+    # Flatten unescaped literal newlines inside JSON strings
+    flattened = text.replace("\r\n", " ").replace("\n", " ")
+    return json.loads(flattened, strict=False)
 
 
 def scripting_node(state: PipelineState) -> dict:
@@ -51,8 +70,7 @@ def scripting_node(state: PipelineState) -> dict:
         response = llm.invoke(messages)
         raw = response.content if hasattr(response, "content") else str(response)
 
-        cleaned = _strip_markdown_fences(raw)
-        data = json.loads(cleaned)
+        data = _parse_json_lenient(raw)
 
         video_prompts = data["video_prompts"]
         voiceover_script = data["voiceover_script"]
