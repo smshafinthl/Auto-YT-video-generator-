@@ -1,12 +1,15 @@
 import abc
 import json
 import time
+import logging
 from pathlib import Path
 
 import requests
 
 from backend.models.config import settings
 from backend.pipeline.editorial import STYLE_CONSTRAINTS
+
+logger = logging.getLogger(__name__)
 
 # Minimal ComfyUI workflow stub used when the real workflow JSON is absent
 _MINIMAL_WORKFLOW_STUB: dict = {
@@ -63,7 +66,7 @@ class ImageBackend(abc.ABC):
 
 
 class ComfyUIImageBackend(ImageBackend):
-    """Image backend that drives a running ComfyUI server."""
+    """Image backend that drives a running ComfyUI server, with automatic local fallback."""
 
     POLL_INTERVAL = 2  # seconds
     TIMEOUT = 120  # seconds
@@ -81,49 +84,62 @@ class ComfyUIImageBackend(ImageBackend):
         payload = {"prompt": workflow}
         base_url = settings.comfyui_base_url.rstrip("/")
 
-        resp = requests.post(f"{base_url}/prompt", json=payload, timeout=30)
-        if resp.status_code != 200:
-            raise RuntimeError(f"ComfyUI /prompt returned {resp.status_code}: {resp.text}")
+        try:
+            resp = requests.post(f"{base_url}/prompt", json=payload, timeout=5)
+            if resp.status_code != 200:
+                raise RuntimeError(f"ComfyUI /prompt returned {resp.status_code}: {resp.text}")
 
-        prompt_id = resp.json()["prompt_id"]
+            prompt_id = resp.json()["prompt_id"]
 
-        # Poll until complete
-        elapsed = 0
-        while elapsed < self.TIMEOUT:
-            time.sleep(self.POLL_INTERVAL)
-            elapsed += self.POLL_INTERVAL
+            # Poll until complete
+            elapsed = 0
+            while elapsed < self.TIMEOUT:
+                time.sleep(self.POLL_INTERVAL)
+                elapsed += self.POLL_INTERVAL
 
-            hist_resp = requests.get(f"{base_url}/history/{prompt_id}", timeout=10)
-            if hist_resp.status_code != 200:
-                continue
+                hist_resp = requests.get(f"{base_url}/history/{prompt_id}", timeout=10)
+                if hist_resp.status_code != 200:
+                    continue
 
-            history = hist_resp.json()
-            if prompt_id not in history:
-                continue
+                history = hist_resp.json()
+                if prompt_id not in history:
+                    continue
 
-            job_data = history[prompt_id]
-            outputs = job_data.get("outputs", {})
+                job_data = history[prompt_id]
+                outputs = job_data.get("outputs", {})
 
-            # Find the first image output
-            for node_output in outputs.values():
-                images = node_output.get("images", [])
-                if images:
-                    filename = images[0]["filename"]
-                    view_resp = requests.get(
-                        f"{base_url}/view",
-                        params={"filename": filename},
-                        timeout=30,
-                    )
-                    if view_resp.status_code != 200:
-                        raise RuntimeError(
-                            f"ComfyUI /view returned {view_resp.status_code}"
+                # Find the first image output
+                for node_output in outputs.values():
+                    images = node_output.get("images", [])
+                    if images:
+                        filename = images[0]["filename"]
+                        view_resp = requests.get(
+                            f"{base_url}/view",
+                            params={"filename": filename},
+                            timeout=30,
                         )
-                    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-                    with open(output_path, "wb") as f:
-                        f.write(view_resp.content)
-                    return str(Path(output_path).resolve())
+                        if view_resp.status_code != 200:
+                            raise RuntimeError(
+                                f"ComfyUI /view returned {view_resp.status_code}"
+                            )
+                        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                        with open(output_path, "wb") as f:
+                            f.write(view_resp.content)
+                        return str(Path(output_path).resolve())
 
-        raise RuntimeError(f"ComfyUI timed out after {self.TIMEOUT}s for prompt_id={prompt_id}")
+            raise RuntimeError(f"ComfyUI timed out after {self.TIMEOUT}s for prompt_id={prompt_id}")
+
+        except Exception as exc:
+            logger.warning(
+                "ComfyUI image generation failed (Error: %s). "
+                "Falling back to copying the stickman seed image as the scene background.",
+                exc
+            )
+            # Copy seed image as fallback scene image
+            import shutil
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(seed_image_path, output_path)
+            return str(Path(output_path).resolve())
 
 
 def get_image_backend() -> ImageBackend:
