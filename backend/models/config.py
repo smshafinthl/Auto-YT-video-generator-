@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     # LLM Settings
-    llm_provider: str = Field(default="auto")  # "auto", "gemini", "openai"
+    llm_provider: str = Field(default="auto")  # "auto", "local", "gemini", "openai"
+    local_llm_model: str = Field(default="Qwen/Qwen2.5-1.5B-Instruct")
     gemini_api_key: str = Field(default="")
     google_api_key: str = Field(default="")
     gemini_model: str = Field(default="gemini-2.0-flash")

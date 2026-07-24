@@ -39,7 +39,14 @@ def _free_vram(unload_model: bool = False) -> None:
                       next iteration. Use for 30+ video batches or if OOM
                       errors occur despite cache.cuda.empty_cache().
     """
-    # Step 1: Python garbage collection
+    # Step 1: Unload local LLM if loaded
+    try:
+        from backend.providers.llm import unload_local_llm
+        unload_local_llm()
+    except Exception:
+        pass
+
+    # Step 2: Python garbage collection
     gc.collect()
 
     # Step 2: CUDA cache flush (works on Kaggle/Colab GPU environments)

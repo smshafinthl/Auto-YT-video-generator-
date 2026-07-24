@@ -129,6 +129,17 @@ def main() -> int:
         help="Abort the entire batch on the first pipeline error (default: skip and continue).",
     )
     parser.add_argument(
+        "--model",
+        metavar="MODEL_NAME",
+        help="LLM model name (e.g., Qwen/Qwen2.5-1.5B-Instruct, gemini-2.0-flash, gpt-4o-mini).",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=["auto", "local", "gemini", "openai"],
+        default=None,
+        help="LLM provider: 'local' (HuggingFace), 'gemini', 'openai', or 'auto'.",
+    )
+    parser.add_argument(
         "--unload-model",
         action="store_true",
         help=(
@@ -138,6 +149,15 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+
+    # Override LLM settings if CLI flags provided
+    from backend.models.config import settings
+    if args.provider:
+        settings.llm_provider = args.provider
+    if args.model:
+        settings.local_llm_model = args.model
+        settings.gemini_model = args.model
+        settings.bifrost_model = args.model
 
     # ── Resolve prompts ──────────────────────────────────────────────────────
     if args.prompts_file:

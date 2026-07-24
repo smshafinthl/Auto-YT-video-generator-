@@ -17,11 +17,11 @@ Pass a list of 30+ topics at once. The system loops through each one, runs the f
 - Optional `--unload-model` flag fully destroys the Wan I2V pipeline cache between runs (for very long batches on small GPUs)
 - Errors are logged per-video and the batch continues by default (use `--stop-on-error` to abort)
 
-### 📣 Auto Subscribe CTA
-Every generated voiceover script now automatically ends with a short, natural call-to-action. It's injected into the LLM system prompt so the CTA always fits the topic:
-- Science → *"Subscribe for more mind-blowing science!"*
-- Space → *"Follow for daily space discoveries!"*
-- History → *"Like and subscribe for more history!"*
+### 🧠 Local & Multi-Provider LLM Support (No API Limits!)
+Avoid cloud API rate limits (429 Resource Exhausted) by running a small, high-quality open-source text model locally (e.g., `Qwen/Qwen2.5-1.5B-Instruct` or `Qwen/Qwen2.5-7B-Instruct`).
+- Automatically offloads to GPU (`device_map="auto"`, `torch.bfloat16`/`float16`)
+- Automatically unloads local LLM weights from VRAM before Wan 2.2 video generation runs
+- Supports `--provider local` and `--model Qwen/Qwen2.5-1.5B-Instruct` CLI flags
 
 ---
 
