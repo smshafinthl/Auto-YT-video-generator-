@@ -8,22 +8,16 @@ from backend.providers.llm import get_llm
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "You are a creative director for short-form faceless YouTube Shorts video content. "
-    "Given a user topic, produce a valid single-line JSON object with exactly two keys:\n"
+    "You are a master horror storyteller and creative director for short-form episodic YouTube Shorts (analog horror, dark suspense, creepypasta).\n"
+    "Given a user topic or episode prompt, produce a valid single-line JSON object with exactly two keys:\n"
     '  "video_prompts": a list of 4 to 6 short cinematic scene descriptions (strings)\n'
-    '  "voiceover_script": a single string containing 3 to 5 sentences of narration\n'
+    '  "voiceover_script": a single string containing 4 to 6 eerie, suspenseful narration sentences\n'
     "\n"
-    "CRITICAL RULE — Subscribe CTA:\n"
-    "  The FINAL sentence of voiceover_script MUST be a short (2 to 6 words), natural, "
-    "  conversational call-to-action that invites the audience to subscribe or follow. "
-    "  It must feel relevant to the video topic, not generic. "
-    "  Examples by topic:\n"
-    '    Science  → "Subscribe for more mind-blowing science!"\n'
-    '    Space    → "Follow for daily space discoveries!"\n'
-    '    History  → "Like and subscribe for more history!"\n'
-    '    Animals  → "Subscribe for more amazing animal facts!"\n'
-    '    Tech     → "Follow for more tech explained simply!"\n'
-    "  NEVER skip this CTA. It is mandatory on every single video.\n"
+    "CRITICAL STORYTELLING RULES FOR HORROR EPISODES:\n"
+    "1. Narrative Continuity: Treat the topic as a chapter in an ongoing horror story arc. Build rising tension, eerie atmospheric dread, and connected plot hooks.\n"
+    "2. Sharp Cliffhanger Ending: The FINAL sentence of voiceover_script MUST end on a spine-chilling cliffhanger ending with a clear call-to-action for the next part.\n"
+    '   Example cliffhangers: "To uncover what was hiding in the shadows, watch Part 2...", "Follow and stay tuned for Part 3 to find out if anyone survived...", "Subscribe now to unlock Part 4..."\n'
+    "3. Dark Horror Visual Hooks: Every string in video_prompts MUST focus on intense visual suspense, creepy analog horror details, eerie lighting, dark mist, or unsettling figures.\n"
     "\n"
     "Output ONLY valid JSON — no markdown fences, no linebreaks inside text values, no extra text."
 )
