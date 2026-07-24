@@ -239,7 +239,6 @@ def main() -> int:
 
     # Resolve output_dir to an ABSOLUTE path under cwd to prevent
     # Kaggle path nesting (Auto-YT.../Auto-YT.../...)
-    from pathlib import Path
     raw_out = args.output_dir
     out_dir_path = Path(raw_out)
     if not out_dir_path.is_absolute():
